@@ -1,0 +1,30 @@
+{*
+
+Use mikroE Timer Calculator to generate proper timer configuration
+and timer ISR.
+
+https://www.mikroe.com/timer-calculator
+
+*}
+unit Click_GNSS2_timer;
+
+uses Click_GNSS2_types;
+
+procedure gnss2_configTimer(); 
+
+implementation
+
+procedure gnss2_configTimer(); 
+begin
+
+
+end;
+
+procedure Timer_interrupt(); 
+begin
+
+    gnss2_tick(); 
+
+end;
+
+end.

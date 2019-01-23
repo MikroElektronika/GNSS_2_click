@@ -1,0 +1,136 @@
+{*
+Example for GNSS2 Click
+
+    Date          : Nov 2017.
+    Author        : MikroE Team
+
+Test configuration CEC :
+    
+    MCU              : CEC1302
+    Dev. Board       : Clicker 2 for CEC1302
+    ARM Compiler ver : v6.1.0.0
+
+---
+
+Description :
+
+The application is composed of three sections :
+
+- System Initialization - Initializes all necessary GPIO pins, UART used for
+the communcation with GSM module and UART used for infromation logging
+- Application Initialization - Initializes driver, power on module and sends few
+command for the default module configuration
+- Application Task - running in parallel core state machine and checks for call flag. 
+If call detected parser will hang up call.
+
+Additional Functions :
+
+All additional functions such as timer initialization and default handler. 
+
+Notes :
+
+- Echo must be turned off for succefull parsing. ( ATE0 )
+- UART polling works much better with HFC enabled.
+- In case of usage of other MCUs Timer initialization must be adjusted according to your MCU.
+
+*}
+program Click_GNSS2_CEC;
+
+uses Click_GNSS2_types, Click_GNSS2_config, Click_GNSS2_timer;
+
+var
+    // COMMANDS
+    GNSS2_AT : string[3];
+    GNSS2_HANGUP : string[4];
+    GNSS2_ECHO_OFF : string[5];
+    GNSS2_FORMAT_DEFAULT : string[10];
+    GNSS2_HFC_ENABLE : string[11];
+
+    // CALLER FLAG
+    callFlag : uint8_t; 
+
+procedure gnss2_default_handler(rsp : ^uint8_t; evArgs : ^uint8_t);
+var
+    ptr_rsp  : ^char;
+
+begin
+    ptr_rsp := rsp + 2;
+
+    if (ptr_rsp^ = 82) then
+    begin
+        callFlag := 1; 
+    end; 
+
+    mikrobus_logWrite( ptr_rsp - 2, _LOG_TEXT );
+
+end;
+
+
+procedure systemInit(); 
+begin
+    GNSS2_AT := 'AT';
+    GNSS2_HANGUP := 'ATH';
+    GNSS2_ECHO_OFF := 'ATE0';
+    GNSS2_FORMAT_DEFAULT := 'AT+CMGF=1';
+    GNSS2_HFC_ENABLE := 'AT+IFC=2,2';
+
+    callFlag := 0;
+
+    mikrobus_gpioInit( _MIKROBUS1, _MIKROBUS_AN_PIN, _GPIO_INPUT );
+    mikrobus_gpioInit( _MIKROBUS1, _MIKROBUS_PWM_PIN, _GPIO_INPUT );
+    mikrobus_gpioInit( _MIKROBUS1, _MIKROBUS_INT_PIN, _GPIO_INPUT );
+    mikrobus_gpioInit( _MIKROBUS1, _MIKROBUS_RST_PIN, _GPIO_OUTPUT );
+    mikrobus_gpioInit( _MIKROBUS1, _MIKROBUS_CS_PIN, _GPIO_OUTPUT );    
+    mikrobus_uartInit(_MIKROBUS1, @_GNSS2_UART_CFG[0]); 
+    mikrobus_logInit(_MIKROBUS2, 9600); 
+
+end;
+
+procedure applicationInit(); 
+begin
+
+// TIMER INIT
+    gnss2_configTimer();  
+
+// DRIVER INIT
+    gnss2_uartDriverInit(T_GNSS2_P(@_MIKROBUS1_GPIO), T_GNSS2_P(@_MIKROBUS1_UART)); 
+    gnss2_coreInit(@gnss2_default_handler, 1500);
+
+// MODULE POWER ON
+    gnss2_hfcEnable(true); 
+    gnss2_modulePower(true); 
+
+// MODULE INIT
+    gnss2_cmdSingle(@GNSS2_AT[0]); 
+    gnss2_cmdSingle(@GNSS2_AT[0]); 
+    gnss2_cmdSingle(@GNSS2_AT[0]); 
+    gnss2_cmdSingle(@GNSS2_ECHO_OFF[0]); 
+    gnss2_cmdSingle(@GNSS2_HFC_ENABLE[0]); 
+    gnss2_cmdSingle(@GNSS2_FORMAT_DEFAULT[0]); 
+
+end;
+
+procedure applicationTask(); 
+begin
+
+    gnss2_process(); 
+
+    if ((0 <> callFlag)) then 
+    begin
+        gnss2_cmdSingle(@GNSS2_HANGUP[0]); 
+        Delay_ms(3000); 
+
+        callFlag := 0; 
+    end;
+end;
+
+begin
+
+    systemInit(); 
+    applicationInit(); 
+    while (1) do 
+    begin 
+        applicationTask(); 
+    end;
+
+end.
